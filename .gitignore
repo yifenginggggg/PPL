@@ -1,0 +1,8 @@
+.DS_Store
+__pycache__/
+*.pyc
+.mypy_cache/
+.pytest_cache/
+outputs/
+
+ppl_writer_checkpoint/writer.pt
