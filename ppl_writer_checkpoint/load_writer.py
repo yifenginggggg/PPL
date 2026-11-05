@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Load the released PPL-Writer checkpoint and run a forward smoke test."""
+"""Load the released PPL-Writer LoRA adapter and run a forward smoke test."""
 
 from __future__ import annotations
 
@@ -8,15 +8,23 @@ import json
 from pathlib import Path
 
 import torch
-from peft import get_peft_model_state_dict, set_peft_model_state_dict
-
-from writer_model import QwenLoRALatentWriter
+from peft import PeftModel
+from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--model-path", required=True, help="local Qwen3-4B-Instruct-2507 directory")
-    parser.add_argument("--checkpoint", type=Path, default=Path("writer.pt"))
+    parser.add_argument(
+        "--model-path",
+        required=True,
+        help="local Qwen/Qwen3.5-4B directory",
+    )
+    parser.add_argument(
+        "--checkpoint",
+        type=Path,
+        default=Path("checkpoint-1278"),
+        help="unpacked LoRA adapter directory",
+    )
     parser.add_argument(
         "--device-map",
         default="",
@@ -27,6 +35,11 @@ def parse_args() -> argparse.Namespace:
         default="",
         help="optional transformers attention implementation, e.g. flash_attention_2",
     )
+    parser.add_argument(
+        "--prompt",
+        default="Profile update",
+        help="text used for the forward smoke test",
+    )
     return parser.parse_args()
 
 
@@ -35,92 +48,38 @@ def main() -> None:
     device_map = args.device_map or ("cuda:0" if torch.cuda.is_available() else "cpu")
     dtype = torch.float32 if device_map == "cpu" else torch.bfloat16
 
-    checkpoint = torch.load(args.checkpoint, map_location="cpu", weights_only=True)
-    config = checkpoint["writer_config"]
-    writer = QwenLoRALatentWriter.from_pretrained(
+    tokenizer = AutoTokenizer.from_pretrained(args.model_path)
+    model = AutoModelForCausalLM.from_pretrained(
         args.model_path,
-        num_memory_tokens=config["num_memory_tokens"],
-        slot_dim=config["slot_dim"],
-        lora_rank=config["lora_rank"],
-        lora_alpha=config["lora_alpha"],
-        lora_dropout=config["lora_dropout"],
         torch_dtype=dtype,
         device_map=device_map,
         attn_implementation=args.attn_implementation or None,
     )
-    expected_adapter = get_peft_model_state_dict(writer.model)
-    adapter_missing = sorted(
-        set(expected_adapter) - set(checkpoint["adapter_state"])
-    )
-    adapter_unexpected = sorted(
-        set(checkpoint["adapter_state"]) - set(expected_adapter)
-    )
-    if adapter_missing:
-        raise RuntimeError(
-            f"checkpoint is missing {len(adapter_missing)} adapter tensors"
-        )
-    if adapter_unexpected:
-        raise RuntimeError(
-            f"checkpoint has {len(adapter_unexpected)} unexpected adapter tensors"
-        )
-    set_peft_model_state_dict(writer.model, checkpoint["adapter_state"])
+    model = PeftModel.from_pretrained(model, args.checkpoint)
+    model.eval()
 
-    custom_state = checkpoint["custom_state"]
-    memory_key = "memory_embeddings"
-    projector_prefix = "slot_projector."
-    if memory_key not in custom_state:
-        raise RuntimeError(f"checkpoint is missing {memory_key}")
-    projector_keys = {
-        key for key in custom_state if key.startswith(projector_prefix)
-    }
-    projector_state = {
-        key[len(projector_prefix):]: custom_state[key]
-        for key in projector_keys
-    }
-    unknown = set(custom_state) - {memory_key} - projector_keys
-    if unknown:
-        raise RuntimeError(
-            f"checkpoint has {len(unknown)} unknown writer tensors"
-        )
-    memory_result = writer.load_state_dict(
-        {memory_key: custom_state[memory_key]}, strict=False
-    )
-    projector_result = writer.slot_projector.load_state_dict(
-        projector_state, strict=False
-    )
-    custom_missing = [
-        key for key in memory_result.missing_keys if key == memory_key
-    ] + list(projector_result.missing_keys)
-    custom_unexpected = (
-        list(memory_result.unexpected_keys)
-        + list(projector_result.unexpected_keys)
-    )
-    if custom_missing:
-        raise RuntimeError(
-            f"checkpoint is missing {len(custom_missing)} writer tensors"
-        )
-    if custom_unexpected:
-        raise RuntimeError(
-            f"checkpoint has {len(custom_unexpected)} unexpected writer tensors"
-        )
-    writer.eval()
+    peft_config = next(iter(model.peft_config.values()))
+    target_modules = peft_config.target_modules
+    if isinstance(target_modules, set):
+        target_modules = sorted(target_modules)
 
-    input_ids = torch.randint(0, 1000, (1, 16), dtype=torch.long)
+    inputs = tokenizer(args.prompt, return_tensors="pt")
+    inputs = {key: value.to(next(model.parameters()).device) for key, value in inputs.items()}
     with torch.no_grad():
-        slots = writer(input_ids)
+        output = model(**inputs)
 
+    trainable = sum(p.numel() for p in model.parameters() if p.requires_grad)
     print(
         json.dumps(
             {
-                "epoch": checkpoint.get("epoch"),
-                "adapter_tensors": len(checkpoint["adapter_state"]),
-                "adapter_missing": len(adapter_missing),
-                "adapter_unexpected": len(adapter_unexpected),
-                "custom_tensors": len(custom_state),
-                "custom_missing": len(custom_missing),
-                "custom_unexpected": len(custom_unexpected),
-                "slots_shape": list(slots.shape),
-                "slots_finite": bool(torch.isfinite(slots).all().item()),
+                "base_model": peft_config.base_model_name_or_path,
+                "adapter_rank": peft_config.r,
+                "adapter_alpha": peft_config.lora_alpha,
+                "adapter_dropout": peft_config.lora_dropout,
+                "target_modules": target_modules,
+                "trainable_parameters": trainable,
+                "logits_shape": list(output.logits.shape),
+                "logits_finite": bool(torch.isfinite(output.logits).all().item()),
             },
             indent=2,
         )

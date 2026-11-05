@@ -1,16 +1,16 @@
 # Progressive Profile Learning (PPL)
 
-A stage-profile dataset, the profile generation pipeline, the profile
-evaluation pipeline, and the PPL-Writer checkpoint.
+A full stagewise profile augmentation of PersonaMem-v2, the profile generation
+pipeline, the profile evaluation pipeline, and the PPL-Writer checkpoint.
 
 ## Contents
 
 | Path | Description |
 | --- | --- |
-| `dataset/` | 999 persona records: original chat history, eight chronological history chunks under the 32K budget, eight cumulative stage profiles |
+| `dataset/` | One record per PersonaMem-v2 persona: original chat history, eight chronological history chunks under the 32K budget, eight cumulative stage profiles |
 | `profile_generation_pipeline/` | Takes an API endpoint and a history; writes eight cumulative stage profiles |
 | `profile_evaluation_pipeline/` | Evaluates one profile against its history on Completeness, Support and Reliability |
-| `ppl_writer_checkpoint/` | PPL-Writer config, loader and smoke test; `writer.pt` is a GitHub Release asset |
+| `ppl_writer_checkpoint/` | PPL-Writer config, loader and smoke test; `writer_checkpoint_1278.zip` is a GitHub Release asset |
 
 ## Dataset
 
@@ -19,11 +19,11 @@ Each `dataset/persona_<id>.json` contains `persona_id`, the original
 stages. `profile_stage_i` is the complete cumulative profile after stage 1..i,
 not a fragment of stage i.
 
-The dataset covers 999 personas (IDs 0-999 except 558) and 7,992 profiles.
-Persona 558 is absent because no authentic raw data or 32K history exists in
-any upstream snapshot. All 7,992 stages were written by `gpt-5.6-sol`; each
-stage records its own model. See [dataset/README.md](dataset/README.md) for the
-schema and chunk reconstruction rule.
+The dataset covers the full official PersonaMem-v2 persona set. Persona 558 is
+absent because no authentic raw data or 32K history exists in any upstream
+snapshot. All stage profiles were written by `gpt-5.6-sol`; each stage records
+its own model. See [dataset/README.md](dataset/README.md) for the schema and
+chunk reconstruction rule.
 
 ## Generation
 

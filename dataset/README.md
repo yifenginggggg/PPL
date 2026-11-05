@@ -1,7 +1,8 @@
 # Persona records: history + eight stage profiles
 
-999 JSON files, one per PersonaMem-v2 persona. Persona 558 is absent because no
-authentic raw data or 32K history exists in any upstream snapshot.
+One JSON file per PersonaMem-v2 persona in the official dataset. Persona 558 is
+absent because no authentic raw data or 32K history exists in any upstream
+snapshot.
 
 ```text
 persona_<id>.json
@@ -35,7 +36,7 @@ filter first: drop `role == "system"` and empty content, then take
 
 ## Provenance
 
-All 7,992 stages were written by `gpt-5.6-sol` using `sol_fast_v1`.
+All stages were written by `gpt-5.6-sol` using `sol_fast_v1`.
 
 Every stage carries its own `generation_model`, `generation_protocol`,
 `profile_sha256`, token counts and validation record in `metadata.stages`.
@@ -43,4 +44,4 @@ Every stage carries its own `generation_model`, `generation_protocol`,
 ## Integrity
 
 `manifest.jsonl` has one row per persona with the output SHA256 and stage
-models. `manifest.json` reports 999 personas and the missing ID.
+models. `manifest.json` records the persona count and any missing IDs.
