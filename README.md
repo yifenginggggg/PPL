@@ -54,8 +54,11 @@ result = evaluate_final(
 Run from `profile_evaluation_pipeline/`, or add it to `PYTHONPATH`. See
 [profile_evaluation_pipeline/README.md](profile_evaluation_pipeline/README.md).
 
-## Status
+## License
 
-Pre-release. The PersonaMem-v2 histories are redistributed for research use;
-confirm the upstream license and privacy terms before public distribution.
-Code licensing is not finalized.
+The code in this repository is released under the MIT License; see `LICENSE`.
+
+The data under `dataset/` is a modified redistribution of PersonaMem-v2 and is
+released under CC BY 4.0; see `DATA_LICENSE.md` for attribution and changes.
+The PPL-Writer adapter is trained from Qwen3.5-4B (Apache-2.0); the base model
+weights are not included.
